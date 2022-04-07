@@ -1,0 +1,12 @@
+SECRET.yaml
+SECRET_KEYS.yaml
+.env
+
+*.log
+*__pycache__/
+*node_modules/
+venv/
+.idea/
+*token.json
+*credentials.json
+*.pickle
