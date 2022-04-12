@@ -1,17 +1,17 @@
 import disnake
 from disnake import ApplicationCommandInteraction as AppCmdInter
-from disnake.ext import commands
+from disnake.ext import commands, tasks
 
 
 class ScheduledEventCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.guilds = []
+        self.events = []
 
-    @commands.slash_command(description="Test command.")
-    async def test(self, inter: AppCmdInter):
-        await inter.response.send_message("test")
-        await inter.channel.send("test2")
-        await inter.channel.send("test3")
+    @tasks.loop(minutes=10.0)
+    async def check_for_scheduled_events(self):
+        self.bot.fetch_guilds()
 
 
 def setup(bot: commands.Bot):
