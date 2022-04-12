@@ -17,6 +17,7 @@ class Keys:
     BOT_NAME: str
     BOT_PREFIX: str
     TEST_SERVER_ID: int
+    EVENT_CHANNEL_ID: int
 
 
 class SATXBot(Bot):
@@ -38,7 +39,7 @@ class SATXBot(Bot):
 
 if __name__ == '__main__':
     intents = disnake.Intents.default()
-    # intents.members = True  # turn on privileged members intent
+    intents.members = True  # turn on privileged members intent
 
     with open("SECRET.yaml", "r") as secret:
         keys = Keys(**yaml.safe_load(secret))
