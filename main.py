@@ -17,7 +17,6 @@ class Keys:
     BOT_NAME: str
     BOT_PREFIX: str
     TEST_SERVER_ID: int
-    EVENT_CHANNEL_ID: int
 
 
 class SATXBot(Bot):

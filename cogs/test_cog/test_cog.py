@@ -5,6 +5,7 @@ import disnake
 from disnake import ApplicationCommandInteraction as AppCmdInter
 from disnake.ext import commands, tasks
 import parsedatetime
+import pytz
 
 
 class TestCog(commands.Cog):
@@ -14,9 +15,8 @@ class TestCog(commands.Cog):
 
     @commands.slash_command(description="Test command.")
     async def test(self, inter: AppCmdInter):
-        await inter.response.send_message("test")
-        await inter.channel.send("test2")
-        await inter.channel.send("test3")
+        test_channel = self.bot.get_channel(963622702839648336)
+        await test_channel.send("test send in thread")
 
     @commands.slash_command(description="Test thread")
     async def test_thread(self, inter: AppCmdInter, thread_name: str):
@@ -82,7 +82,8 @@ class TestCog(commands.Cog):
     async def reply_hi(self, event: disnake.GuildScheduledEvent):
         test_channel = self.bot.get_channel(self.bot.keys.EVENT_CHANNEL_ID)
         await test_channel.send(
-            f"Event Name: {event.name}\n Event Description: {event.description}\n Owner: <@{event.creator_id}")
+            f"Event Name: {event.name}\n Event Description: {event.description}\n Owner: <@{event.creator_id}"
+        )
 
     # EVENT LOOPS
     @tasks.loop(minutes=5)

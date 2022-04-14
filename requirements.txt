@@ -6,3 +6,4 @@ pre-commit==2.16.0
 mypy==0.930
 PyYAML==6.0
 parsedatetime==2.6
+pytz
