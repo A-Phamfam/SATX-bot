@@ -76,17 +76,13 @@ class ScheduledEventCog(commands.Cog):
         print(f"The IRL events channel ID was read as {config['irl_events_channel_id']} from event_config.yaml")
         print(f"The metroplex roles from event_config.yaml were {config['metroplex_roles']}")
 
-    @tasks.loop(minutes=10.0)
-    async def check_to_remind_scheduled_event(self):
-        self.bot.fetch_guilds()
-
 
 async def get_event_link(guild_id: int, event_id: int) -> str:
     return f"https://discord.com/events/{guild_id}/{event_id}"
 
 
 async def get_metroplex_listed(input_string: str):
-    metroplex_regex = r"\[((?:DTX)|(?:SATX)|(?:ATX)|(?:HTX))\]"
+    metroplex_regex = r"\[((?:DTX)|(?:SATX)|(?:ATX)|(?:HTX))|(?:CSTAT)\]"
     return re.match(metroplex_regex, input_string)[0]
 
 
