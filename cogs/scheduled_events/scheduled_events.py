@@ -95,9 +95,50 @@ class ScheduledEventCog(commands.Cog):
         print(f"The IRL events channel ID was read as {config['irl_events_channel_id']} from event_config.yaml")
         print(f"The metroplex roles from event_config.yaml were {config['metroplex_roles']}")
 
+    @commands.message_command(name="Start Event Management")
+    async def start_event_management(self, inter: AppCmdInter, event_msg: disnake.Message):
+        if inter.author.id != self.bot.keys.BOT_OWNER_ID:
+            inter.response.send("Only the bot owner can use this command.", ephemeral=True)
+        event_id = await find_event_id(event_msg.content)
+        event = await inter.guild.fetch_scheduled_event(event_id)
+        if not event:
+            inter.response.send("No valid event link was found in this message.", ephemeral=True)
+            return
+
+        event_thread = event_msg.thread
+        if not event_thread:
+            inter.response.send("There is not a valid event thread connected to this message.", ephemeral=True)
+            return
+
+        metro_role_id = await find_metro_role_id(event_msg.content)
+        if not metro_role_id:
+            inter.response.send("No metro events role was found in this message.", ephemeral=True)
+            return
+
+        await self.initialize_bot_event_management(event_msg, event, event_thread, metro_role_id)
+
 
 async def get_event_link(guild_id: int, event_id: int) -> str:
     return f"https://discord.com/events/{guild_id}/{event_id}"
+
+
+async def find_event_id(input_string: str) -> int:
+    event_id_regex = r"https:\/\/discord\.com\/events\/\d{18}\/(\d{18})"
+    event_id_match = re.match(event_id_regex, input_string)
+    if event_id_match:
+        return int(event_id_match[1])
+
+
+async def find_metro_role_id(input_string: str) -> int:
+    metro_id_regex = r"<@&(\d{18})>"
+    metro_id_match = re.match(metro_id_regex, input_string)
+    if metro_id_match:
+        return int(metro_id_match[1])
+
+
+async def create_event_role(event_name: str, guild: disnake.Guild, metro_role_id: int) -> disnake.Role:
+    metro_role = guild.get_role(metro_role_id)
+    return await guild.create_role(name=event_name, color=metro_role.color, mentionable=True)
 
 
 async def get_empty_rsvp_embed(event_creator_id):

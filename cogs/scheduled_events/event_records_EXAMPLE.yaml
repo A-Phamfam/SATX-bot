@@ -5,3 +5,7 @@ event_to_thread:
 event_to_message:
   # {event ID: announcement message ID}
   {}
+
+event_to_role:
+  # {event ID: role ID}
+  { }
