@@ -30,11 +30,10 @@ class RsvpView(disnake.ui.View):
         self.event_message = event_message
         self.subscriber = subscriber
         self.event_creator = event_creator
-        self.responded = False
         self.dm_embed = disnake.Embed(title=f"RSVP to the event: {self.event.name}", description=self.event.description)
 
     def enable_all_buttons(self):
-        self.going.disable = False
+        self.going.disabled = False
         self.maybe.disabled = False
         self.not_going.disabled = False
 
@@ -42,7 +41,6 @@ class RsvpView(disnake.ui.View):
     async def going(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         self.enable_all_buttons()
         self.going.disabled = True
-        self.responded = True
 
         rsvp_embed = await updated_rsvp_embed(self.event_message.embeds[0], self.subscriber, category=0)
         await self.event_message.edit(content=self.event_message.content, embed=rsvp_embed)
@@ -56,7 +54,6 @@ class RsvpView(disnake.ui.View):
     async def maybe(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         self.enable_all_buttons()
         self.maybe.disabled = True
-        self.responded = True
 
         rsvp_embed = await updated_rsvp_embed(self.event_message.embeds[0], self.subscriber, category=1)
         await self.event_message.edit(content=self.event_message.content, embed=rsvp_embed)
@@ -70,7 +67,6 @@ class RsvpView(disnake.ui.View):
     async def not_going(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         self.enable_all_buttons()
         self.not_going.disabled = True
-        self.responded = True
 
         rsvp_embed = await updated_rsvp_embed(self.event_message.embeds[0], self.subscriber, category=2)
         await self.event_message.edit(content=self.event_message.content, embed=rsvp_embed)
