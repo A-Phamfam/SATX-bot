@@ -148,14 +148,11 @@ class ScheduledEventCog(commands.Cog):
     """ RSVP Message """
 
     async def send_rsvp_message(self, event: disnake.GuildScheduledEvent,
-                                subscriber: disnake.Member) -> disnake.Message:
+                                subscriber: disnake.Member, rsvp_list_message: disnake.Message) -> disnake.Message:
         event_thread = self.bot.get_channel(self.event_records.event_to_thread[event.id])
         event_creator = await self.bot.fetch_user(event.creator_id)
 
-        rsvp_embed = await get_empty_rsvp_embed(event.creator_id, event.name)
-        event_message = await event_creator.send(embed=rsvp_embed)
-
-        rsvp_view = RsvpView(event, event_thread, event_message, subscriber, event_creator)
+        rsvp_view = RsvpView(event, event_thread, rsvp_list_message, subscriber, event_creator)
         return await subscriber.send(embed=rsvp_view.dm_embed, view=rsvp_view)
 
     @commands.slash_command(description="Send slash commands for this event to all interested users.")
@@ -168,21 +165,37 @@ class ScheduledEventCog(commands.Cog):
         if inter.author.id != event.creator_id:
             await inter.response.send_message("This command can only be used by the event creator.", ephemeral=True)
             return
-        event_subscribers = await event.fetch_users()
+
+        # Create and send the RSVP list to the event creator
+        event_creator = await self.bot.fetch_user(event.creator_id)
+        rsvp_embed = await get_empty_rsvp_embed(event.creator_id, event.name)
+        rsvp_list_message = await event_creator.send(embed=rsvp_embed)
+        self.rsvp_list_messages[event.id] = rsvp_list_message.id
+        await inter.response.defer(ephemeral=True)
+
+        # Create and send the RSVP messages
         self.rsvp_messages[event.id] = []
-        await inter.response.defer()
+        event_subscribers = await event.fetch_users()
         for subscriber in event_subscribers:
             if subscriber.id == event.creator_id:
                 continue
-            rsvp_msg = await self.send_rsvp_message(event, subscriber)
+            rsvp_msg = await self.send_rsvp_message(event, subscriber, rsvp_list_message)
             self.rsvp_messages[event.id].append(rsvp_msg.id)
         await inter.followup.send("RSVP messages have been sent!", ephemeral=True)
 
     @commands.Cog.listener(name="on_guild_scheduled_event_subscribe")
     async def send_late_rsvp(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
         if not self.rsvp_messages.get(event.id):
+            # RSVP messages have not been sent out yet.
             return
-        rsvp_msg = await self.send_rsvp_message(event, subscriber)
+        event_thread = self.bot.get_channel(self.event_records.event_to_thread[event.id])
+        event_creator = await self.bot.fetch_user(event.creator_id)
+
+        rsvp_list_message_id = self.rsvp_list_messages[event.id]
+        rsvp_list_message = self.bot.get_message(rsvp_list_message_id)
+
+        rsvp_view = RsvpView(event, event_thread, rsvp_list_message, subscriber, event_creator)
+        rsvp_msg = await subscriber.send(embed=rsvp_view.dm_embed, view=rsvp_view)
         self.rsvp_messages[event.id].append(rsvp_msg.id)
 
     @commands.Cog.listener(name="on_guild_scheduled_event_delete")
@@ -193,6 +206,7 @@ class ScheduledEventCog(commands.Cog):
             msg = self.bot.get_message(rsvp_msg_id)
             await msg.delete()
         self.rsvp_messages.pop(event.id)
+        self.rsvp_list_messages.pop(event.id)
 
     """ Bot Initialization """
 

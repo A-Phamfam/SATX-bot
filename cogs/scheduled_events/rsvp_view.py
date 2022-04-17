@@ -21,13 +21,13 @@ class RsvpView(disnake.ui.View):
     def __init__(self,
                  event: disnake.GuildScheduledEvent,
                  event_thread: disnake.Thread,
-                 event_message: Union[disnake.Message, disnake.PartialMessage],
+                 rsvp_list_message: Union[disnake.Message, disnake.PartialMessage],
                  subscriber: Union[disnake.Member, disnake.User],
                  event_creator: disnake.User):
         super().__init__(timeout=None)
         self.event = event
         self.event_thread = event_thread
-        self.event_message = event_message
+        self.rsvp_list_message = rsvp_list_message
         self.subscriber = subscriber
         self.event_creator = event_creator
         self.dm_embed = disnake.Embed(title=f"RSVP to the event: {self.event.name}", description=self.event.description)
@@ -42,8 +42,8 @@ class RsvpView(disnake.ui.View):
         self.enable_all_buttons()
         self.going.disabled = True
 
-        rsvp_embed = await updated_rsvp_embed(self.event_message.embeds[0], self.subscriber, category=0)
-        await self.event_message.edit(content=self.event_message.content, embed=rsvp_embed)
+        rsvp_embed = await updated_rsvp_embed(self.rsvp_list_message.embeds[0], self.subscriber, category=0)
+        await self.rsvp_list_message.edit(content=self.rsvp_list_message.content, embed=rsvp_embed)
 
         await inter.response.edit_message(content="You have RSVPed that you are **going**.",
                                           embed=self.dm_embed, view=self)
@@ -55,8 +55,8 @@ class RsvpView(disnake.ui.View):
         self.enable_all_buttons()
         self.maybe.disabled = True
 
-        rsvp_embed = await updated_rsvp_embed(self.event_message.embeds[0], self.subscriber, category=1)
-        await self.event_message.edit(content=self.event_message.content, embed=rsvp_embed)
+        rsvp_embed = await updated_rsvp_embed(self.rsvp_list_message.embeds[0], self.subscriber, category=1)
+        await self.rsvp_list_message.edit(content=self.rsvp_list_message.content, embed=rsvp_embed)
 
         await inter.response.edit_message(content="You have RSVPed that you are **maybe going**.",
                                           embed=self.dm_embed, view=self)
@@ -68,8 +68,8 @@ class RsvpView(disnake.ui.View):
         self.enable_all_buttons()
         self.not_going.disabled = True
 
-        rsvp_embed = await updated_rsvp_embed(self.event_message.embeds[0], self.subscriber, category=2)
-        await self.event_message.edit(content=self.event_message.content, embed=rsvp_embed)
+        rsvp_embed = await updated_rsvp_embed(self.rsvp_list_message.embeds[0], self.subscriber, category=2)
+        await self.rsvp_list_message.edit(content=self.rsvp_list_message.content, embed=rsvp_embed)
 
         await inter.response.edit_message(content="You have RSVPed that you are **not going**.",
                                           embed=self.dm_embed, view=self)
