@@ -5,6 +5,7 @@ import re
 import yaml
 from main import SATXBot
 from typing import Dict, List
+from .rsvp_view import RsvpView
 
 
 class EventRecords:
@@ -39,7 +40,9 @@ class ScheduledEventCog(commands.Cog):
 
         # Announce event and create thread
         metro_role_id = self.metroplex_roles[event_metroplex]
-        announce_msg = await self.irl_events_channel.send(f"<@{metro_role_id}>\n" + "New Event!!\n" + event_link)
+        rsvp_embed = await get_empty_rsvp_embed(event.creator_id)
+        announce_msg = await self.irl_events_channel.send(f"<@&{metro_role_id}>\n" + "New Event!!\n" + event_link,
+                                                          embed=rsvp_embed)
         event_thread = await announce_msg.create_thread(name=event.name)
         await event_thread.send(f"<@{event.creator_id}> is the host of this event!")
 
@@ -64,6 +67,16 @@ class ScheduledEventCog(commands.Cog):
         event_thread = self.bot.get_channel(self.event_records.event_to_thread[event.id])
         await event_thread.send(f"<@{subscriber.id}> is interested in {event.name}!")
 
+    @commands.Cog.listener(name="on_guild_scheduled_event_subscribe")
+    async def send_rsvp_message(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
+        if subscriber.id == event.creator_id:
+            return
+        event_thread = self.bot.get_channel(self.event_records.event_to_thread[event.id])
+        event_message = await self.irl_events_channel.fetch_message(self.event_records.event_to_message[event.id])
+        event_creator = await self.bot.fetch_user(event.creator_id)
+        rsvp_view = RsvpView(event, event_thread, event_message, subscriber, event_creator)
+        await subscriber.send(embed=rsvp_view.dm_embed, view=rsvp_view)
+
     @commands.Cog.listener(name="on_ready")
     async def read_from_event_records(self):
         # Initialize the record of existing events to their threads and RSVPed Users
@@ -85,6 +98,14 @@ class ScheduledEventCog(commands.Cog):
 
 async def get_event_link(guild_id: int, event_id: int) -> str:
     return f"https://discord.com/events/{guild_id}/{event_id}"
+
+
+async def get_empty_rsvp_embed(event_creator_id):
+    rsvp_embed = (disnake.Embed(title="RSVP List")
+                  .add_field(name="Going", value=f"<@{event_creator_id}")
+                  .add_field(name="Maybe", value="* *")
+                  .add_field(name="Not Going", value="* *"))
+    return rsvp_embed
 
 
 async def get_metroplex_listed(input_string: str):

@@ -1,6 +1,7 @@
-events_to_thread:
+event_to_thread:
   # {event ID: thread ID}
+  {}
 
-event_rsvp_pinged:
-  # {event ID: [ user IDs ]
-
+event_to_message:
+  # {event ID: announcement message ID}
+  {}

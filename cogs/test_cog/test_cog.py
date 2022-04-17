@@ -15,8 +15,13 @@ class TestCog(commands.Cog):
 
     @commands.slash_command(description="Test command.")
     async def test(self, inter: AppCmdInter):
-        test_channel = self.bot.get_channel(963622702839648336)
-        await test_channel.send("test send in thread")
+        rsvp_embed = (disnake.Embed(title="RSVP List")
+                      .add_field(name="Going", value="* *")
+                      .add_field(name="Maybe", value="* *")
+                      .add_field(name="Not Going", value="* *"))
+        q = rsvp_embed.to_dict()
+        print(rsvp_embed.to_dict)
+        await inter.response.send_message(embed=rsvp_embed)
 
     @commands.slash_command(description="Test thread")
     async def test_thread(self, inter: AppCmdInter, thread_name: str):
@@ -60,7 +65,7 @@ class TestCog(commands.Cog):
     @commands.Cog.listener(name="on_member_join")
     async def on_member_join(self, member: disnake.Member):
         test_channel = self.bot.get_channel(961770441532395550)
-        await test_channel.send(f"Hi <@{member.id}!>")
+        await test_channel.send(f"Hi <@{member.id}>!")
 
     @commands.Cog.listener("on_guild_scheduled_event_subscribe")
     async def send_hi(self, event: disnake.GuildScheduledEvent, user: disnake.Member):
@@ -77,13 +82,6 @@ class TestCog(commands.Cog):
     @commands.Cog.listener("on_message_edit")
     async def reply_hi(self, message_before: disnake.Message, message_after: disnake.Message):
         await message_after.reply("hi")
-
-    @commands.Cog.listener("on_guild_scheduled_event_create")
-    async def reply_hi(self, event: disnake.GuildScheduledEvent):
-        test_channel = self.bot.get_channel(self.bot.keys.EVENT_CHANNEL_ID)
-        await test_channel.send(
-            f"Event Name: {event.name}\n Event Description: {event.description}\n Owner: <@{event.creator_id}"
-        )
 
     # EVENT LOOPS
     @tasks.loop(minutes=5)
