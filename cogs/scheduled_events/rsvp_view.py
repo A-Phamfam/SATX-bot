@@ -14,7 +14,6 @@ async def updated_rsvp_embed(original_embed: disnake.Embed, subscriber: disnake.
         embed['fields'][category]['value'] = f"<@{subscriber.id}>"
     else:
         embed['fields'][category]['value'] = embed['fields'][category]['value'] + f"<@{subscriber.id}>"
-    print(embed)
     return disnake.Embed.from_dict(embed)
 
 
