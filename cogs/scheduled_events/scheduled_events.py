@@ -3,8 +3,9 @@ from disnake import ApplicationCommandInteraction as AppCmdInter
 from disnake.ext import commands, tasks
 import re
 import yaml
+import asyncio
 from main import SATXBot
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from .rsvp_view import RsvpView
 
 
@@ -67,7 +68,7 @@ class ScheduledEventCog(commands.Cog):
         event_role = await create_event_role(event.name, event.guild, metro_role_id)
         await event_thread.send(f"<@{event.creator_id}> is the host of this event!\n\n"
                                 f"The pingable role <@&{event_role.id}> has been created for you "
-                                f"to ping all interested members.\n"
+                                f"to ping all interested members.\n\n"
                                 f"When you are ready, use the `/send_rsvp` command for an RSVP message to be DMed "
                                 f"to all interested users. The updated RSVP list will be sent to you.")
         await self.event_records.add_event(event.id, event_thread.id, announce_msg.id, event_role.id)
@@ -89,31 +90,60 @@ class ScheduledEventCog(commands.Cog):
             await self.create_thread(event_after)
 
     """ Event Role """
+
     @commands.Cog.listener(name="on_guild_scheduled_event_update")
     async def rename_event_role_name(self, event_before: disnake.GuildScheduledEvent,
                                      event_after: disnake.GuildScheduledEvent):
         if event_before.name == event_after.name:
             return
+        while not self.event_records.event_to_role.get(event_after.id):
+            await asyncio.sleep(0.1)
         event_guild = await self.bot.fetch_guild(event_after.guild_id)
         event_role_id = self.event_records.event_to_role[event_after.id]
         event_role = event_guild.get_role(event_role_id)
         await event_role.edit(name=event_after.name)
 
-    @commands.Cog.listener(name="on_guild_scheduled_event_delete")
-    async def remove_event_role(self, event):
-        event_guild = await self.bot.fetch_guild(event.guild_id)
-        event_role_id = self.event_records.event_to_role[event.id]
-        event_role = event_guild.get_role(event_role_id)
-        await event_role.delete()
+    async def delete_event_role(self, event):
+        try:
+            event_guild = await self.bot.fetch_guild(event.guild_id)
+            event_role_id = self.event_records.event_to_role[event.id]
+            event_role = event_guild.get_role(event_role_id)
+            await event_role.delete()
 
-        await self.event_records.remove_event(event.id)
+            await self.event_records.remove_event(event.id)
+        except KeyError:
+            pass
+
+    @commands.Cog.listener(name="on_guild_scheduled_event_update")
+    async def deleted_remove_event_role(self, event_before, event: disnake.GuildScheduledEvent):
+        if event.status == disnake.GuildScheduledEventStatus.completed:
+            await self.delete_event_role(event)
+
+    @commands.Cog.listener(name="on_guild_scheduled_event_delete")
+    async def deleted_remove_event_role(self, event):
+        await self.delete_event_role(event)
 
     @commands.Cog.listener(name="on_guild_scheduled_event_subscribe")
-    async def ping_person_in_thread(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
+    async def add_role_and_ping_in_thread(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
         if subscriber.id == event.creator_id:
             return
         event_thread = self.bot.get_channel(self.event_records.event_to_thread[event.id])
         await event_thread.send(f"<@{subscriber.id}> is interested in {event.name}!")
+        event_role = await self.fetch_event_role(event.guild_id, event.id)
+        await subscriber.add_roles(event_role)
+
+    @commands.Cog.listener(name="on_guild_scheduled_event_unsubscribe")
+    async def unsubscribe_event_role(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
+        event_role = await self.fetch_event_role(event.guild_id, event.id)
+        await subscriber.remove_roles(event_role)
+
+    async def fetch_event_role(self, guild_id: int, event_id: int) -> disnake.Role:
+        while not self.event_records.event_to_role.get(event_id):
+            await asyncio.sleep(0.1)
+        event_role_id = self.event_records.event_to_role[event_id]
+        guild = await self.bot.fetch_guild(guild_id)
+        event_role = guild.get_role(event_role_id)
+        return event_role
 
     """ RSVP Message """
 
@@ -132,25 +162,40 @@ class ScheduledEventCog(commands.Cog):
     async def send_rsvp(self, inter: AppCmdInter):
         event_id_of_thread = get_key(self.event_records.event_to_thread, inter.channel_id)
         if not event_id_of_thread:
-            inter.response.send("This command can only be used in a valid event thread.", ephemeral=True)
+            await inter.response.send_message("This command can only be used in a valid event thread.", ephemeral=True)
+            return
         event = await inter.guild.fetch_scheduled_event(event_id_of_thread)
         if inter.author.id != event.creator_id:
-            inter.response.send("This command can only be used by the event creator.", ephemeral=True)
+            await inter.response.send_message("This command can only be used by the event creator.", ephemeral=True)
+            return
         event_subscribers = await event.fetch_users()
+        self.rsvp_messages[event.id] = []
+        await inter.response.defer()
         for subscriber in event_subscribers:
             if subscriber.id == event.creator_id:
                 continue
             rsvp_msg = await self.send_rsvp_message(event, subscriber)
             self.rsvp_messages[event.id].append(rsvp_msg.id)
+        await inter.followup.send("RSVP messages have been sent!", ephemeral=True)
+
+    @commands.Cog.listener(name="on_guild_scheduled_event_subscribe")
+    async def send_late_rsvp(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
+        if not self.rsvp_messages.get(event.id):
+            return
+        rsvp_msg = await self.send_rsvp_message(event, subscriber)
+        self.rsvp_messages[event.id].append(rsvp_msg.id)
 
     @commands.Cog.listener(name="on_guild_scheduled_event_delete")
     async def delete_all_rsvp_messages(self, event):
+        if not self.rsvp_messages.get(event.id):
+            return
         for rsvp_msg_id in self.rsvp_messages[event.id]:
             msg = self.bot.get_message(rsvp_msg_id)
             await msg.delete()
         self.rsvp_messages.pop(event.id)
 
     """ Bot Initialization """
+
     @commands.Cog.listener(name="on_ready")
     async def read_from_event_records(self):
         # Initialize the record of existing events to their threads and RSVPed Users
@@ -172,24 +217,32 @@ class ScheduledEventCog(commands.Cog):
     @commands.message_command(name="Start Event Management")
     async def start_event_management(self, inter: AppCmdInter, event_msg: disnake.Message):
         if inter.author.id != self.bot.keys.BOT_OWNER_ID:
-            inter.response.send("Only the bot owner can use this command.", ephemeral=True)
-        event_id = await find_event_id(event_msg.content)
-        event = await inter.guild.fetch_scheduled_event(event_id)
-        if not event:
-            inter.response.send("No valid event link was found in this message.", ephemeral=True)
+            await inter.response.send_message("Only the bot owner can use this command.", ephemeral=True)
             return
+        print(event_msg.content)
+        event_id = await find_event_id(event_msg.content)
+        if not event_id:
+            await inter.response.send_message("No valid event link was found in this message.", ephemeral=True)
+            return
+        event = await inter.guild.fetch_scheduled_event(event_id)
 
         event_thread = event_msg.thread
         if not event_thread:
-            inter.response.send("There is not a valid event thread connected to this message.", ephemeral=True)
+            await inter.response.send_message("There is not a valid event thread connected to this message.",
+                                              ephemeral=True)
             return
 
         metro_role_id = await find_metro_role_id(event_msg.content)
         if not metro_role_id:
-            inter.response.send("No metro events role was found in this message.", ephemeral=True)
+            await inter.response.send_message("No metro events role was found in this message.", ephemeral=True)
+            return
+
+        if self.event_records.event_to_thread.get(event_id):
+            await inter.response.send_message("This event already is being managed by the bot.", ephemeral=True)
             return
 
         await self.initialize_bot_event_management(event_msg, event, event_thread, metro_role_id)
+        await inter.response.send_message("Event management successful.")
 
 
 async def get_event_link(guild_id: int, event_id: int) -> str:
@@ -197,15 +250,15 @@ async def get_event_link(guild_id: int, event_id: int) -> str:
 
 
 async def find_event_id(input_string: str) -> int:
-    event_id_regex = r"https:\/\/discord\.com\/events\/\d{18}\/(\d{18})"
-    event_id_match = re.match(event_id_regex, input_string)
+    event_id_regex = "https:\/\/discord\.com\/events\/\d{18}\/(\d{18})"
+    event_id_match = re.search(event_id_regex, input_string)
     if event_id_match:
         return int(event_id_match[1])
 
 
 async def find_metro_role_id(input_string: str) -> int:
     metro_id_regex = r"<@&(\d{18})>"
-    metro_id_match = re.match(metro_id_regex, input_string)
+    metro_id_match = re.search(metro_id_regex, input_string)
     if metro_id_match:
         return int(metro_id_match[1])
 
@@ -215,9 +268,9 @@ async def create_event_role(event_name: str, guild: disnake.Guild, metro_role_id
     return await guild.create_role(name=event_name, color=metro_role.color, mentionable=True)
 
 
-async def get_empty_rsvp_embed(event_creator_id):
-    rsvp_embed = (disnake.Embed(title="RSVP List")
-                  .add_field(name="Going", value=f"<@{event_creator_id}")
+async def get_empty_rsvp_embed(event_creator_id, event_name):
+    rsvp_embed = (disnake.Embed(title=f"RSVP List for {event_name}")
+                  .add_field(name="Going", value=f"<@{event_creator_id}>")
                   .add_field(name="Maybe", value="* *")
                   .add_field(name="Not Going", value="* *"))
     return rsvp_embed
@@ -225,7 +278,7 @@ async def get_empty_rsvp_embed(event_creator_id):
 
 async def get_metroplex_listed(input_string: str):
     metroplex_regex = r"\[((?:DTX)|(?:SATX)|(?:ATX)|(?:HTX)|(?:CSTAT))\]"
-    metro_match = re.match(metroplex_regex, input_string)
+    metro_match = re.search(metroplex_regex, input_string)
     if metro_match:
         return metro_match[1]
 
