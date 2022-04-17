@@ -33,13 +33,15 @@ class RsvpView(disnake.ui.View):
         self.responded = False
         self.dm_embed = disnake.Embed(title=f"RSVP to the event: {self.event.name}", description=self.event.description)
 
+    def enable_all_buttons(self):
+        self.going.disable = False
+        self.maybe.disabled = False
+        self.not_going.disabled = False
+
     @disnake.ui.button(label="Going", style=disnake.ButtonStyle.green)
     async def going(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
+        self.enable_all_buttons()
         self.going.disabled = True
-
-        if self.responded:
-            self.maybe.disabled = False
-            self.not_going.disabled = False
         self.responded = True
 
         rsvp_embed = await updated_rsvp_embed(self.event_message.embeds[0], self.subscriber, category=0)
@@ -48,15 +50,12 @@ class RsvpView(disnake.ui.View):
         await inter.response.edit_message(content="You have RSVPed that you are **going**.",
                                           embed=self.dm_embed, view=self)
         if self.event.creator_id != inter.author.id:
-            await self.event_creator.send(f"<@{inter.author.id}> is going to to {self.event.name}!")
+            await self.event_creator.send(f"<@{inter.author.id}> is going to {self.event.name}!")
 
     @disnake.ui.button(label="Maybe", style=disnake.ButtonStyle.grey)
     async def maybe(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
+        self.enable_all_buttons()
         self.maybe.disabled = True
-
-        if self.responded:
-            self.going.disabled = False
-            self.not_going.disabled = False
         self.responded = True
 
         rsvp_embed = await updated_rsvp_embed(self.event_message.embeds[0], self.subscriber, category=1)
@@ -69,11 +68,8 @@ class RsvpView(disnake.ui.View):
 
     @disnake.ui.button(label="Not Going", style=disnake.ButtonStyle.red)
     async def not_going(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
+        self.enable_all_buttons()
         self.not_going.disabled = True
-
-        if self.responded:
-            self.going.disabled = False
-            self.maybe.disabled = False
         self.responded = True
 
         rsvp_embed = await updated_rsvp_embed(self.event_message.embeds[0], self.subscriber, category=2)
