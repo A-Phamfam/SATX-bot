@@ -43,6 +43,7 @@ class ScheduledEventCog(commands.Cog):
         self.irl_events_channel: disnake.TextChannel = None
         self.metroplex_roles = {}
         self.rsvp_messages = {}
+        self.rsvp_list_messages = {}
 
     """ Thread Creation """
 
