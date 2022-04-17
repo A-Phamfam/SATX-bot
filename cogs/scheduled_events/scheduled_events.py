@@ -152,7 +152,7 @@ class ScheduledEventCog(commands.Cog):
         event_thread = self.bot.get_channel(self.event_records.event_to_thread[event.id])
         event_creator = await self.bot.fetch_user(event.creator_id)
 
-        rsvp_embed = await get_empty_rsvp_embed(event.creator_id)
+        rsvp_embed = await get_empty_rsvp_embed(event.creator_id, event.name)
         event_message = await event_creator.send(embed=rsvp_embed)
 
         rsvp_view = RsvpView(event, event_thread, event_message, subscriber, event_creator)
