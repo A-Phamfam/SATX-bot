@@ -17,7 +17,9 @@ class EventRecords:
 
     async def rewrite_to_yaml(self):
         with open("./cogs/scheduled_events/event_records.yaml", "w") as records:
-            yaml.dump({"event_to_thread": self.event_to_thread, "event_to_message": self.event_to_message},
+            yaml.dump({"event_to_thread": self.event_to_thread,
+                       "event_to_message": self.event_to_message,
+                       "event_to_role": self.event_to_role},
                       records)
 
     async def add_event(self, event_id: int, event_thread_id: int, event_message_id: int, event_role_id: int):
