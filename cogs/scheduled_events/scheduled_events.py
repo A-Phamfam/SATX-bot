@@ -8,13 +8,14 @@ from typing import Dict, List
 
 
 class EventRecords:
-    def __init__(self, event_to_thread: Dict[int, int], event_rsvped: Dict[int, List[int]]):
+    def __init__(self, event_to_thread: Dict[int, int], event_to_message: Dict[int, int]):
         self.event_to_thread = event_to_thread
-        self.event_rsvped = event_rsvped
+        self.event_to_message = event_to_message
 
     async def rewrite_to_yaml(self):
-        async with open("event_records.yaml", "w") as records:
-            yaml.dump(self.__dict__, records)
+        with open("./cogs/scheduled_events/event_records.yaml", "w") as records:
+            yaml.dump({"event_to_thread": self.event_to_thread, "event_to_message": self.event_to_message},
+                      records)
 
 
 class ScheduledEventCog(commands.Cog):
@@ -40,9 +41,11 @@ class ScheduledEventCog(commands.Cog):
         metro_role_id = self.metroplex_roles[event_metroplex]
         announce_msg = await self.irl_events_channel.send(f"<@{metro_role_id}>\n" + "New Event!!\n" + event_link)
         event_thread = await announce_msg.create_thread(name=event.name)
+        await event_thread.send(f"<@{event.creator_id}> is the host of this event!")
 
-        # Add the event thread to the event records
+        # Add the event thread and announcement message to the event records
         self.event_records.event_to_thread[event.id] = event_thread.id
+        self.event_records.event_to_message[event.id] = announce_msg.id
         await self.event_records.rewrite_to_yaml()
 
     @commands.Cog.listener(name="on_guild_scheduled_event_create")
@@ -51,25 +54,28 @@ class ScheduledEventCog(commands.Cog):
 
     @commands.Cog.listener(name="on_guild_scheduled_event_update")
     async def retry_thread_creation(self, event_before, event_after: disnake.GuildScheduledEvent):
-        if event_after.id not in self.event_records.event_to_thread:
+        if (not self.event_records.event_to_thread) or (event_after.id not in self.event_records.event_to_thread):
             await self.create_thread(event_after)
 
     @commands.Cog.listener(name="on_guild_scheduled_event_subscribe")
     async def ping_person_in_thread(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
+        if subscriber.id == event.creator_id:
+            return
         event_thread = self.bot.get_channel(self.event_records.event_to_thread[event.id])
         await event_thread.send(f"<@{subscriber.id}> is interested in {event.name}!")
 
     @commands.Cog.listener(name="on_ready")
     async def read_from_event_records(self):
         # Initialize the record of existing events to their threads and RSVPed Users
-        with open("event_records.yaml", "r") as f:
+        with open("./cogs/scheduled_events/event_records.yaml", "r") as f:
             self.event_records = EventRecords(**yaml.safe_load(f))
-        print(f"{len(self.event_records.event_to_thread)} events have been read from event_records.yaml")
+        if self.event_records.event_to_thread:
+            print(f"{len(self.event_records.event_to_thread)} events have been read from event_records.yaml")
 
     @commands.Cog.listener(name="on_ready")
     async def read_event_config(self):
         # Initialize the IRL events channel and metroplex roles from configs
-        with open("event_config.yaml", "r") as f:
+        with open("./cogs/scheduled_events/event_config.yaml", "r") as f:
             config = yaml.safe_load(f)
             self.irl_events_channel = self.bot.get_channel(config["irl_events_channel_id"])
             self.metroplex_roles = config["metroplex_roles"]
@@ -82,8 +88,10 @@ async def get_event_link(guild_id: int, event_id: int) -> str:
 
 
 async def get_metroplex_listed(input_string: str):
-    metroplex_regex = r"\[((?:DTX)|(?:SATX)|(?:ATX)|(?:HTX))|(?:CSTAT)\]"
-    return re.match(metroplex_regex, input_string)[0]
+    metroplex_regex = r"\[((?:DTX)|(?:SATX)|(?:ATX)|(?:HTX)|(?:CSTAT))\]"
+    metro_match = re.match(metroplex_regex, input_string)
+    if metro_match:
+        return metro_match[1]
 
 
 def setup(bot: SATXBot):
