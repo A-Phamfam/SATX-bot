@@ -326,7 +326,7 @@ async def get_empty_rsvp_embed(event_creator_id, event_name):
 
 
 async def get_metroplex_listed(input_string: str):
-    metroplex_regex = r"\[((?:DTX)|(?:SATX)|(?:ATX)|(?:HTX)|(?FW)|(?:CSTAT))\]"
+    metroplex_regex = r"\[((?:DTX)|(?:SATX)|(?:ATX)|(?:HTX)|(?:FW)|(?:CSTAT))\]"
     metro_match = re.search(metroplex_regex, input_string)
     if metro_match:
         return metro_match[1]
