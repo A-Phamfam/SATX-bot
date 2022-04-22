@@ -187,6 +187,7 @@ class ScheduledEventCog(commands.Cog):
 
     @commands.slash_command(description="Send slash commands for this event to all interested users.")
     async def send_rsvp(self, inter: AppCmdInter):
+        await inter.response.defer(ephemeral=True)
         event_id_of_thread = get_key(self.event_records.event_to_thread, inter.channel_id)
         if not event_id_of_thread:
             await inter.response.send_message("This command can only be used in a valid event thread.", ephemeral=True)
@@ -203,7 +204,6 @@ class ScheduledEventCog(commands.Cog):
         rsvp_embed = await get_empty_rsvp_embed(event.creator_id, event.name)
         rsvp_list_message = await event_creator.send(embed=rsvp_embed)
         self.rsvp_list_messages[event.id] = rsvp_list_message.id
-        await inter.response.defer(ephemeral=True)
 
         # Create and send the RSVP messages
         self.rsvp_messages[event.id] = []
