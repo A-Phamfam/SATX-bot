@@ -265,7 +265,7 @@ class ScheduledEventCog(commands.Cog):
 
     @commands.message_command(name="Start Event Management")
     async def start_event_management(self, inter: AppCmdInter, event_msg: disnake.Message):
-        if inter.author.id != self.bot.keys.BOT_OWNER_ID:
+        if inter.author.id not in [self.bot.keys.BOT_OWNER_ID, self.bot.keys.TEST_SERVER_MOD_ID]:
             await inter.response.send_message("Only the bot owner can use this command.", ephemeral=True)
             return
 
