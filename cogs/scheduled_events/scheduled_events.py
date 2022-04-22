@@ -93,9 +93,9 @@ class ScheduledEventCog(commands.Cog):
         for subscriber in event_subscribers:
             await subscriber.add_roles(event_role)
 
-        await event_thread.send(f"<@{event.creator_id}> is the host of this event!\n\n"
-                                f"You can ping <@&{event_role.id}> to talk to all interested users.\n\n"
-                                f"Use the `/send_rsvp` command for an RSVP message to be DMed "
+        await event_thread.send(f"<@{event.creator_id}> is the host of this event!")
+        await event_thread.send(f"You can ping <@&{event_role.id}> to talk to all interested users.")
+        await event_thread.send(f"The host can use the `/send_rsvp` command for an RSVP message to be DMed "
                                 f"to all interested users. The updated RSVP list will be sent to you.")
         await self.event_records.add_event(event.id, event_thread.id, announce_msg.id, event_role.id)
 
@@ -103,8 +103,8 @@ class ScheduledEventCog(commands.Cog):
         """
         Notify bot owner to fix the event so that the proper role can be pinged.
         """
-        bot_owner = self.bot.get_user(self.bot.keys.BOT_OWNER_ID)
-        await bot_owner.send(f"The following event does not list the metroplex. "
+        bot_owner = self.bot.get_user(self.bot.keys.TEST_SERVER_MOD_ID)
+        await bot_owner.send(f"The following event does not list the metroplex tag. "
                              f"Please edit and fix the event for the thread to be created. \n"
                              f"{event_link}")
 
@@ -124,6 +124,7 @@ class ScheduledEventCog(commands.Cog):
                                            event_after: disnake.GuildScheduledEvent):
         if event_after.status == disnake.GuildScheduledEventStatus.completed:
             await self.delete_event_role(event_after)
+            await self.delete_all_rsvp_messages(event_after)
             return
         if event_before.name == event_after.name:
             return
@@ -150,13 +151,14 @@ class ScheduledEventCog(commands.Cog):
     @commands.Cog.listener(name="on_guild_scheduled_event_delete")
     async def deleted_remove_event_role(self, event):
         await self.delete_event_role(event)
+        await self.delete_all_rsvp_messages(event)
 
     @commands.Cog.listener(name="on_guild_scheduled_event_subscribe")
     async def add_role_and_ping_in_thread(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
         if subscriber.id == event.creator_id:
             return
         event_thread = self.bot.get_channel(self.event_records.event_to_thread[event.id])
-        await event_thread.send(f"<@{subscriber.id}> is interested in {event.name}!")
+        await event_thread.send(f"<@{subscriber.id}> is interested in **{event.name}**!")
         event_role = await self.fetch_event_role(event.guild_id, event.id)
         await subscriber.add_roles(event_role)
 
@@ -193,6 +195,8 @@ class ScheduledEventCog(commands.Cog):
         if inter.author.id != event.creator_id:
             await inter.response.send_message("This command can only be used by the event creator.", ephemeral=True)
             return
+        if self.rsvp_list_messages.get(event.id):
+            await inter.response.send_message("You have already sent out the RSVP messages.", ephemeral=True)
 
         # Create and send the RSVP list to the event creator
         event_creator = await self.bot.fetch_user(event.creator_id)
@@ -213,7 +217,7 @@ class ScheduledEventCog(commands.Cog):
 
     @commands.Cog.listener(name="on_guild_scheduled_event_subscribe")
     async def send_late_rsvp(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
-        if not self.rsvp_messages.get(event.id):
+        if self.rsvp_messages.get(event.id) is None:
             # RSVP messages have not been sent out yet.
             return
         event_thread = self.bot.get_channel(self.event_records.event_to_thread[event.id])
@@ -226,9 +230,8 @@ class ScheduledEventCog(commands.Cog):
         rsvp_msg = await subscriber.send(embed=rsvp_view.dm_embed, view=rsvp_view)
         self.rsvp_messages[event.id].append(rsvp_msg.id)
 
-    @commands.Cog.listener(name="on_guild_scheduled_event_delete")
     async def delete_all_rsvp_messages(self, event):
-        if not self.rsvp_messages.get(event.id):
+        if self.rsvp_messages.get(event.id) is None:
             # RSVP messages were not sent
             return
         # Delete each individual list

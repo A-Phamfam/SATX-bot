@@ -1,0 +1,50 @@
+test procedure:
+
+Test 1:
+create event without "[CITY] event name":
+	verify that the bot owner is notified
+edit event to have "[CITY] event name":
+	verify pinged @CITY role
+	verify event link created
+	verify thread created
+	verify role created
+	verify starter message created
+
+Test 2:
+change name of event:
+	verify role name changed
+
+Test 3:
+event is completed:
+	event role deleted
+
+Test 4:
+event is cancelled:
+	event role deleted
+
+Test 5:
+user subscribe:
+	ping user in channel
+	event role is added to user
+
+Test 6:
+user unsubscribes:
+	event role is removed from user
+
+Test 7:
+/send_rsvp message is done by
+	- in non-event-thread: fail
+	- non-event-creator: fail
+	- sends rsvp messages to everyone except creator
+
+	verify RSVP list is sent to creator
+	verify RSVP msg sent to all interested parties
+	verify RSVP buttons update to the creator
+
+	if user subscribes when RSVP have been sent:
+		send RSVP msg
+delete or finish event
+	RSVP messages to all users is deleted
+
+Test 8:
+start event management

@@ -17,7 +17,7 @@ class Keys:
     BOT_NAME: str
     BOT_PREFIX: str
     TEST_SERVER_ID: int
-
+    TEST_SERVER_MOD_ID: int
 
 class SATXBot(Bot):
     """
