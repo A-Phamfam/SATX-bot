@@ -57,7 +57,7 @@ class ScheduledEventCog(commands.Cog):
         """
         event_link = await get_event_link(event.guild_id, event.id)
         event_metroplex = await get_metroplex_listed(event.name)
-        metro_role_id = self.metroplex_roles[event_metroplex]
+        metro_role_id = self.metroplex_roles.get(event_metroplex)
         return f"<@&{metro_role_id}>\n" + f"New event: {event.name}\n" + event_link
 
     async def announce_event_and_create_thread(self, event: disnake.GuildScheduledEvent):
@@ -77,7 +77,7 @@ class ScheduledEventCog(commands.Cog):
         event_thread = await announce_msg.create_thread(name=event.name)
 
         # Start event role management
-        metro_role_id = self.metroplex_roles[event_metroplex]
+        metro_role_id = self.metroplex_roles.get(event_metroplex)
         await self.create_event_role_and_help_message(announce_msg, event, event_thread, metro_role_id)
 
     async def create_event_role_and_help_message(self,
@@ -170,7 +170,7 @@ class ScheduledEventCog(commands.Cog):
     async def fetch_event_role(self, guild_id: int, event_id: int) -> disnake.Role:
         while not self.event_records.event_to_role.get(event_id):
             await asyncio.sleep(0.1)
-        event_role_id = self.event_records.event_to_role[event_id]
+        event_role_id = self.event_records.event_to_role.get(event_id)
         guild = await self.bot.fetch_guild(guild_id)
         event_role = guild.get_role(event_role_id)
         return event_role
