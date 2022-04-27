@@ -1,7 +1,7 @@
 SECRET.yaml
 SECRET_KEYS.yaml
 event_config.yaml
-cogs/scheduled_events/event_records.yaml
+event_records.yaml
 .env
 
 *.log

@@ -49,6 +49,34 @@ class ScheduledEventCog(commands.Cog):
         self.rsvp_messages = {}
         self.rsvp_list_messages = {}
 
+    @commands.Cog.listener()
+    async def on_ready(self):
+        await self.read_from_event_records()
+        await self.read_event_config()
+
+    @commands.Cog.listener()
+    async def on_guild_scheduled_event_create(self, event: disnake.GuildScheduledEvent):
+        await self.announce_event_and_create_thread(event)
+
+    @commands.Cog.listener()
+    async def on_guild_scheduled_event_update(self, event_before: disnake.GuildScheduledEvent, event_after: disnake.GuildScheduledEvent):
+        await self.retry_thread_creation(event_before, event_after)
+        await self.rename_event_role_and_thread(event_before, event_after)
+
+    @commands.Cog.listener()
+    async def on_guild_scheduled_event_subscribe(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
+        await self.add_role_and_ping_in_thread(event, subscriber)
+        await self.send_late_rsvp(event, subscriber)
+
+    @commands.Cog.listener()
+    async def on_guild_scheduled_event_unsubscribe(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
+        await self.unsubscribe_event_role(event, subscriber)
+
+    @commands.Cog.listener()
+    async def on_guild_scheduled_event_delete(self, event: disnake.GuildScheduledEvent):
+        await self.delete_event_role(event)
+        await self.delete_all_rsvp_messages(event)
+
     """ Announcement and Thread Creation """
 
     async def get_event_message(self, event: disnake.GuildScheduledEvent):
@@ -108,18 +136,11 @@ class ScheduledEventCog(commands.Cog):
                              f"Please edit and fix the event for the thread to be created. \n"
                              f"{event_link}")
 
-    @commands.Cog.listener(name="on_guild_scheduled_event_create")
-    async def thread_creation(self, event: disnake.GuildScheduledEvent):
-        await self.announce_event_and_create_thread(event)
-
-    @commands.Cog.listener(name="on_guild_scheduled_event_update")
     async def retry_thread_creation(self, event_before, event_after: disnake.GuildScheduledEvent):
         if (not self.event_records.event_to_thread) or (event_after.id not in self.event_records.event_to_thread):
             await self.announce_event_and_create_thread(event_after)
 
     """ Event Role """
-
-    @commands.Cog.listener(name="on_guild_scheduled_event_update")
     async def rename_event_role_and_thread(self, event_before: disnake.GuildScheduledEvent,
                                            event_after: disnake.GuildScheduledEvent):
         if event_after.status == disnake.GuildScheduledEventStatus.completed:
@@ -148,12 +169,6 @@ class ScheduledEventCog(commands.Cog):
         except KeyError:
             pass
 
-    @commands.Cog.listener(name="on_guild_scheduled_event_delete")
-    async def deleted_remove_event_role(self, event):
-        await self.delete_event_role(event)
-        await self.delete_all_rsvp_messages(event)
-
-    @commands.Cog.listener(name="on_guild_scheduled_event_subscribe")
     async def add_role_and_ping_in_thread(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
         if subscriber.id == event.creator_id:
             return
@@ -162,7 +177,6 @@ class ScheduledEventCog(commands.Cog):
         event_role = await self.fetch_event_role(event.guild_id, event.id)
         await subscriber.add_roles(event_role)
 
-    @commands.Cog.listener(name="on_guild_scheduled_event_unsubscribe")
     async def unsubscribe_event_role(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
         event_role = await self.fetch_event_role(event.guild_id, event.id)
         await subscriber.remove_roles(event_role)
@@ -215,7 +229,6 @@ class ScheduledEventCog(commands.Cog):
             self.rsvp_messages[event.id].append(rsvp_msg.id)
         await inter.followup.send("RSVP messages have been sent!", ephemeral=True)
 
-    @commands.Cog.listener(name="on_guild_scheduled_event_subscribe")
     async def send_late_rsvp(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
         if self.rsvp_messages.get(event.id) is None:
             # RSVP messages have not been sent out yet.
@@ -242,8 +255,6 @@ class ScheduledEventCog(commands.Cog):
         self.rsvp_list_messages.pop(event.id)
 
     """ Bot Initialization """
-
-    @commands.Cog.listener(name="on_ready")
     async def read_from_event_records(self):
         """
         Reads all the prior event records from the event_records.yaml file and adds them to the bot's event records
@@ -253,7 +264,6 @@ class ScheduledEventCog(commands.Cog):
         if self.event_records.event_to_thread:
             print(f"{len(self.event_records.event_to_thread)} events have been read from event_records.yaml")
 
-    @commands.Cog.listener(name="on_ready")
     async def read_event_config(self):
         # Initialize the IRL events channel and metroplex roles from configs
         with open("./cogs/scheduled_events/event_config.yaml", "r") as f:
