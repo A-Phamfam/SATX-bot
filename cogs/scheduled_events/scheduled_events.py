@@ -53,6 +53,7 @@ class ScheduledEventCog(commands.Cog):
     async def on_ready(self):
         await self.read_from_event_records()
         await self.read_event_config()
+        await self.add_all_late_roles()
 
     @commands.Cog.listener()
     async def on_guild_scheduled_event_create(self, event: disnake.GuildScheduledEvent):
@@ -148,6 +149,9 @@ class ScheduledEventCog(commands.Cog):
             await self.delete_all_rsvp_messages(event_after)
             return
         if event_before.name == event_after.name:
+            return
+
+        if event_after.creator_id != self.bot.keys.BOT_ID:
             return
 
         event_role = await self.fetch_event_role(event_after.guild_id, event_after.id)
@@ -272,6 +276,17 @@ class ScheduledEventCog(commands.Cog):
             self.metroplex_roles = config["metroplex_roles"]
         print(f"The IRL events channel ID was read as {config['irl_events_channel_id']} from event_config.yaml")
         print(f"The metroplex roles from event_config.yaml were {config['metroplex_roles']}")
+
+    async def add_all_late_roles(self):
+        guild = await self.bot.fetch_guild(self.bot.keys.TEST_SERVER_ID)
+        events = await guild.fetch_scheduled_events()
+        for event in events:
+            role_id = self.event_records.event_to_role[event.id]
+            event_role = guild.get_role(role_id)
+            users = await event.fetch_users()
+            for user in users:
+                if not user.get_role(role_id):
+                    await self.add_role_and_ping_in_thread(event, user)
 
     @commands.message_command(name="Start Event Management")
     async def start_event_management(self, inter: AppCmdInter, event_msg: disnake.Message):
