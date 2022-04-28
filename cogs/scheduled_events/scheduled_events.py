@@ -4,8 +4,9 @@ from disnake.ext import commands
 import re
 import yaml
 from main import SATXBot
-from typing import Dict
+from typing import Dict, List
 from .rsvp_view import RsvpView
+from util import logger
 
 
 class EventRecords:
@@ -30,13 +31,16 @@ class EventRecords:
         self.event_to_thread[event_id] = event_thread_id
         self.event_to_message[event_id] = event_message_id
         self.event_to_role[event_id] = event_role_id
+        logger.info(f"Event records has recorded {event_id}: [{event_thread_id}, {event_message_id}, {event_role_id}]")
         await self.rewrite_to_yaml()
 
     async def remove_event(self, event_id):
         self.event_to_thread.pop(event_id)
         self.event_to_message.pop(event_id)
         self.event_to_role.pop(event_id)
+        logger.info(f"Event records has removed {event_id}.")
         await self.rewrite_to_yaml()
+
 
 class ScheduledEventCog(commands.Cog):
     def __init__(self, bot: SATXBot):
@@ -51,7 +55,14 @@ class ScheduledEventCog(commands.Cog):
     async def on_ready(self):
         await self.read_from_event_records()
         await self.read_event_config()
-        await self.add_all_late_roles()
+
+        guild = await self.bot.fetch_guild(self.bot.keys.TEST_SERVER_ID)
+        events = await guild.fetch_scheduled_events()
+        roles = await guild.fetch_roles()
+
+        await self.add_all_late_roles(guild, events)
+        await self.remind_of_events(events)
+        await self.purge_old_events(guild)
 
     @commands.Cog.listener()
     async def on_guild_scheduled_event_create(self, event: disnake.GuildScheduledEvent):
@@ -62,6 +73,8 @@ class ScheduledEventCog(commands.Cog):
                                               event_after: disnake.GuildScheduledEvent):
         await self.retry_thread_creation(event_before, event_after)
         await self.rename_event_role_and_thread(event_before, event_after)
+        if event_after.status == disnake.GuildScheduledEventStatus.completed:
+            await self.delete_event(event_after.guild_id, event_after.id)
 
     @commands.Cog.listener()
     async def on_guild_scheduled_event_subscribe(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
@@ -75,8 +88,7 @@ class ScheduledEventCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_scheduled_event_delete(self, event: disnake.GuildScheduledEvent):
-        await self.delete_event_role(event)
-        await self.delete_all_rsvp_messages(event)
+        await self.delete_event(event.guild_id, event.id)
 
     """ Announcement and Thread Creation """
 
@@ -133,11 +145,13 @@ class ScheduledEventCog(commands.Cog):
         # Event does not have the correct tag so alert the bot owner
         if not (await get_metroplex_listed(event.name)):
             await self.alert_invalid_event_name(event_link)
+            logger.info(f"{event.name} ({event_link}) has no metro and the bot owner has been notified.")
             return
 
         # Announce event and create thread
         announce_msg = await self.irl_events_channel.send(await self.get_event_message(event))
         event_thread = await announce_msg.create_thread(name=event.name)
+        logger.info(f"**{event.name}** has been announced ({announce_msg.jump_url}).")
 
         # Start event role management
         metro_role_id = self.metroplex_roles.get(event_metroplex)
@@ -174,11 +188,9 @@ class ScheduledEventCog(commands.Cog):
 
     async def rename_event_role_and_thread(self, event_before: disnake.GuildScheduledEvent,
                                            event_after: disnake.GuildScheduledEvent):
-        if event_after.status == disnake.GuildScheduledEventStatus.completed:
-            await self.delete_event_role(event_after)
-            await self.delete_all_rsvp_messages(event_after)
-            return
         if event_before.name == event_after.name:
+            return
+        if event_after.id not in self.event_records.event_to_thread.keys():
             return
 
         event_role = await self.fetch_event_role(event_after.guild_id, event_after.id)
@@ -194,16 +206,6 @@ class ScheduledEventCog(commands.Cog):
         if event_message.author.id == self.bot.keys.BOT_ID:
             await event_message.edit(content=(await self.get_event_message(event_after)))
 
-    async def delete_event_role(self, event):
-        event_guild = await self.bot.fetch_guild(event.guild_id)
-        event_role_id = self.event_records.event_to_role.get(event.id)
-        if not event_role_id:
-            return
-        event_role = event_guild.get_role(event_role_id)
-        await event_role.delete()
-
-        await self.event_records.remove_event(event.id)
-
     async def add_role_and_ping_in_thread(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
         if subscriber.id == event.creator_id:
             return
@@ -213,15 +215,19 @@ class ScheduledEventCog(commands.Cog):
         await event_thread.send(f"<@{subscriber.id}> is interested in **{event.name}**!")
         event_role = await self.fetch_event_role(event.guild_id, event.id)
         await subscriber.add_roles(event_role)
+        logger.info(f"{subscriber.name} ({subscriber.id}) has added the role {event_role.name} ({event_role.id})")
 
     async def unsubscribe_event_role(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
         event_role = await self.fetch_event_role(event.guild_id, event.id)
         await subscriber.remove_roles(event_role)
+        logger.info(f"{subscriber.name} ({subscriber.id}) has removed the role {event_role.name} ({event_role.id})")
 
     async def fetch_event_role(self, guild_id: int, event_id: int) -> disnake.Role:
         event_role_id = self.event_records.event_to_role.get(event_id)
         guild = await self.bot.fetch_guild(guild_id)
         event_role = guild.get_role(event_role_id)
+        if not event_role:
+            raise LookupError(f"Fetched event role for {event_role_id}, but it does not exist.")
         return event_role
 
     """ RSVP Message """
@@ -234,7 +240,9 @@ class ScheduledEventCog(commands.Cog):
         event_creator = await self.bot.fetch_user(event.creator_id)
 
         rsvp_view = RsvpView(event, event_thread, rsvp_list_message, subscriber, event_creator)
-        return await subscriber.send(embed=rsvp_view.dm_embed, view=rsvp_view)
+        rsvp_message = await subscriber.send(embed=rsvp_view.dm_embed, view=rsvp_view)
+        logger.info(f"{subscriber.name} ({subscriber.id}) has been sent an RSVP for {event.name} ({event.id})")
+        return rsvp_message
 
     @commands.slash_command(description="Send slash commands for this event to all interested users.")
     async def send_rsvp(self, inter: AppCmdInter):
@@ -270,7 +278,7 @@ class ScheduledEventCog(commands.Cog):
         if self.rsvp_messages.get(event.id) is None:
             # RSVP messages have not been sent out yet.
             return
-        event_thread = self.bot.get_channel(self.event_records.event_to_thread.get(event.id))
+        event_thread = await event.guild.fetch_channel(self.event_records.event_to_thread.get(event.id))
         if not event_thread:
             return
         event_creator = await self.bot.fetch_user(event.creator_id)
@@ -278,22 +286,36 @@ class ScheduledEventCog(commands.Cog):
         rsvp_list_message_id = self.rsvp_list_messages.get(event.id)
         if not rsvp_list_message_id:
             return
-        rsvp_list_message = self.bot.get_message(rsvp_list_message_id)
+        rsvp_list_message = subscriber.fetch_message(rsvp_list_message_id)
 
         rsvp_view = RsvpView(event, event_thread, rsvp_list_message, subscriber, event_creator)
         rsvp_msg = await subscriber.send(embed=rsvp_view.dm_embed, view=rsvp_view)
         self.rsvp_messages[event.id].append(rsvp_msg.id)
 
-    async def delete_all_rsvp_messages(self, event):
-        if self.rsvp_messages.get(event.id) is None:
+    async def delete_all_rsvp_messages(self, event_id):
+        if self.rsvp_messages.get(event_id) is None:
             # RSVP messages were not sent
             return
         # Delete each individual list
-        for rsvp_msg_id in self.rsvp_messages.get(event.id):
+        for rsvp_msg_id in self.rsvp_messages.get(event_id):
             msg = self.bot.get_message(rsvp_msg_id)
             await msg.delete()
-        self.rsvp_messages.pop(event.id)
-        self.rsvp_list_messages.pop(event.id)
+        self.rsvp_messages.pop(event_id)
+        self.rsvp_list_messages.pop(event_id)
+
+    async def delete_event_role(self, guild_id, event_id):
+        event_guild = await self.bot.fetch_guild(guild_id)
+        event_role_id = self.event_records.event_to_role.get(event_id)
+        if not event_role_id:
+            return
+        event_role = event_guild.get_role(event_role_id)
+        await event_role.delete()
+        print(f"The role {event_role} has been deleted.")
+
+    async def delete_event(self, guild_id: int, event_id: int):
+        await self.event_records.remove_event(event_id)
+        await self.delete_all_rsvp_messages(event_id)
+        await self.delete_event_role(guild_id, event_id)
 
     """ Bot Initialization """
 
@@ -315,9 +337,7 @@ class ScheduledEventCog(commands.Cog):
         print(f"The IRL events channel ID was read as {config['irl_events_channel_id']} from event_config.yaml")
         print(f"The metroplex roles from event_config.yaml were {config['metroplex_roles']}")
 
-    async def add_all_late_roles(self):
-        guild = await self.bot.fetch_guild(self.bot.keys.TEST_SERVER_ID)
-        events = await guild.fetch_scheduled_events()
+    async def add_all_late_roles(self, guild: disnake.Guild, events: List[disnake.GuildScheduledEvent]):
         for event in events:
             role_id = self.event_records.event_to_role.get(event.id)
             if not role_id:
@@ -327,6 +347,25 @@ class ScheduledEventCog(commands.Cog):
             for user in users:
                 if not user.get_role(role_id):
                     await self.add_role_and_ping_in_thread(event, user)
+
+    async def remind_of_events(self, events: List[disnake.GuildScheduledEvent]):
+        bot_owner = self.bot.get_user(self.bot.keys.TEST_SERVER_MOD_ID)
+        for event in events:
+            if event.id not in self.event_records.event_to_thread.keys():
+                event_link = await get_event_link(event.guild_id, event.id)
+                await bot_owner.send(f"{event.name} hasn't been announced in the events channel!\n {event_link}")
+
+    @commands.slash_command(name="purge_old_events",
+                            description="Purge all the old events that have already been cancelled or deleted")
+    async def command_purge_old_events(self, inter: AppCmdInter):
+        self.purge_old_events(inter.guild)
+
+    async def purge_old_events(self, guild):
+        events = await guild.fetch_scheduled_events()
+        current_event_ids = [event.id for event in events]
+        for event_record_id in self.event_records.event_to_thread.keys():
+            if event_record_id not in current_event_ids:
+                await self.delete_event(guild.id, event_record_id)
 
 
 async def get_event_link(guild_id: int, event_id: int) -> str:
@@ -353,7 +392,9 @@ async def create_event_role(event_name: str, guild: disnake.Guild, metro_role_id
     if event_name in roles:
         raise Exception("Event likely already has a role")
 
-    return await guild.create_role(name=event_name, color=metro_role.color, mentionable=True)
+    event_role = await guild.create_role(name=event_name, color=metro_role.color, mentionable=True)
+    logger.info(f"**{event_name}** has added the role {event_role.id}.")
+    return event_role
 
 
 async def add_event_role_to_users(event_role: disnake.Role,
@@ -365,6 +406,7 @@ async def add_event_role_to_users(event_role: disnake.Role,
     event_subscribers = await event.fetch_users()
     for subscriber in event_subscribers:
         await subscriber.add_roles(event_role)
+        logger.info(f"The role **{event_role.name}** has been added to {subscriber.display_name} ({subscriber.id})")
     return event_role
 
 
