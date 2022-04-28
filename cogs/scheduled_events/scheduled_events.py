@@ -288,7 +288,8 @@ class ScheduledEventCog(commands.Cog):
         rsvp_list_message_id = self.rsvp_list_messages.get(event.id)
         if not rsvp_list_message_id:
             return
-        rsvp_list_message = subscriber.fetch_message(rsvp_list_message_id)
+
+        rsvp_list_message = await event_creator.fetch_message(rsvp_list_message_id)
 
         rsvp_view = RsvpView(event, event_thread, rsvp_list_message, subscriber, event_creator)
         rsvp_msg = await subscriber.send(embed=rsvp_view.dm_embed, view=rsvp_view)
@@ -361,7 +362,7 @@ class ScheduledEventCog(commands.Cog):
     @commands.slash_command(name="purge_old_events",
                             description="Purge all the old events that have already been cancelled or deleted")
     async def command_purge_old_events(self, inter: AppCmdInter):
-        self.purge_old_events(inter.guild)
+        await self.purge_old_events(inter.guild)
 
     async def purge_old_events(self, guild):
         events = await guild.fetch_scheduled_events()
