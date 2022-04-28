@@ -206,6 +206,8 @@ class ScheduledEventCog(commands.Cog):
         if event_message.author.id == self.bot.keys.BOT_ID:
             await event_message.edit(content=(await self.get_event_message(event_after)))
 
+        logger.info(f"Event ({event_after.id}) has changed from **{event_before.name}** to {event_after.name}")
+
     async def add_role_and_ping_in_thread(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
         if subscriber.id == event.creator_id:
             return
@@ -249,14 +251,14 @@ class ScheduledEventCog(commands.Cog):
         await inter.response.defer(ephemeral=True)
         event_id_of_thread = get_key(self.event_records.event_to_thread, inter.channel_id)
         if not event_id_of_thread:
-            await inter.response.send_message("This command can only be used in a valid event thread.", ephemeral=True)
+            await inter.followup.send("This command can only be used in a valid event thread.", ephemeral=True)
             return
         event = await inter.guild.fetch_scheduled_event(event_id_of_thread)
         if inter.author.id != event.creator_id:
-            await inter.response.send_message("This command can only be used by the event creator.", ephemeral=True)
+            await inter.followup.send("This command can only be used by the event creator.", ephemeral=True)
             return
         if self.rsvp_list_messages.get(event.id):
-            await inter.response.send_message("You have already sent out the RSVP messages.", ephemeral=True)
+            await inter.followup.send("You have already sent out the RSVP messages.", ephemeral=True)
 
         # Create and send the RSVP list to the event creator
         event_creator = await self.bot.fetch_user(event.creator_id)
@@ -300,6 +302,7 @@ class ScheduledEventCog(commands.Cog):
         for rsvp_msg_id in self.rsvp_messages.get(event_id):
             msg = self.bot.get_message(rsvp_msg_id)
             await msg.delete()
+        logger.info(f"Deleted {len(self.rsvp_messages.get(event_id))} messages for event {event_id}.")
         self.rsvp_messages.pop(event_id)
         self.rsvp_list_messages.pop(event_id)
 
@@ -309,13 +312,13 @@ class ScheduledEventCog(commands.Cog):
         if not event_role_id:
             return
         event_role = event_guild.get_role(event_role_id)
+        logger.info(f"The role {event_role.id} has been deleted for {event_id}.")
         await event_role.delete()
-        print(f"The role {event_role} has been deleted.")
 
     async def delete_event(self, guild_id: int, event_id: int):
-        await self.event_records.remove_event(event_id)
         await self.delete_all_rsvp_messages(event_id)
         await self.delete_event_role(guild_id, event_id)
+        await self.event_records.remove_event(event_id)
 
     """ Bot Initialization """
 
@@ -363,7 +366,8 @@ class ScheduledEventCog(commands.Cog):
     async def purge_old_events(self, guild):
         events = await guild.fetch_scheduled_events()
         current_event_ids = [event.id for event in events]
-        for event_record_id in self.event_records.event_to_thread.keys():
+        event_record_ids = self.event_records.event_to_thread.keys()
+        for event_record_id in event_record_ids:
             if event_record_id not in current_event_ids:
                 await self.delete_event(guild.id, event_record_id)
 

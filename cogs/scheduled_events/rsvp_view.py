@@ -1,7 +1,7 @@
 import disnake
 import re
 from typing import Union
-
+from util import logger
 
 async def updated_rsvp_embed(original_embed: disnake.Embed, subscriber: disnake.User, category: int):
     embed = original_embed.to_dict()
@@ -49,6 +49,7 @@ class RsvpView(disnake.ui.View):
                                           embed=self.dm_embed, view=self)
         if self.event.creator_id != inter.author.id:
             await self.event_creator.send(f"<@{inter.author.id}> is going to {self.event.name}!")
+            logger.info(f"<@{inter.author.id}> is going to {self.event.name}!")
 
     @disnake.ui.button(label="Maybe", style=disnake.ButtonStyle.grey)
     async def maybe(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
@@ -62,6 +63,7 @@ class RsvpView(disnake.ui.View):
                                           embed=self.dm_embed, view=self)
         if self.event.creator_id != inter.author.id:
             await self.event_creator.send(f"<@{inter.author.id}> might be going to {self.event.name}.")
+            logger.info(f"<@{inter.author.id}> might be going to {self.event.name}.")
 
     @disnake.ui.button(label="Not Going", style=disnake.ButtonStyle.red)
     async def not_going(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
@@ -75,4 +77,5 @@ class RsvpView(disnake.ui.View):
                                           embed=self.dm_embed, view=self)
         if self.event.creator_id != inter.author.id:
             await self.event_creator.send(f"<@{inter.author.id}> is not going to {self.event.name} :(")
+            logger.info(f"<@{inter.author.id}> is not going to {self.event.name} :(")
 
