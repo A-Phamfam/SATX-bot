@@ -73,7 +73,8 @@ class ScheduledEventCog(commands.Cog):
                                               event_after: disnake.GuildScheduledEvent):
         await self.retry_thread_creation(event_before, event_after)
         await self.rename_event_role_and_thread(event_before, event_after)
-        if event_after.status == disnake.GuildScheduledEventStatus.completed:
+        if event_after.status == disnake.GuildScheduledEventStatus.completed\
+                and self.event_records.event_to_thread.get(event_after.id):
             await self.delete_event(event_after.guild_id, event_after.id)
 
     @commands.Cog.listener()
@@ -220,6 +221,8 @@ class ScheduledEventCog(commands.Cog):
         logger.info(f"{subscriber.name} ({subscriber.id}) has added the role {event_role.name} ({event_role.id})")
 
     async def unsubscribe_event_role(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
+        if not self.event_records.event_to_thread.get(event.id):
+            return
         event_role = await self.fetch_event_role(event.guild_id, event.id)
         await subscriber.remove_roles(event_role)
         logger.info(f"{subscriber.name} ({subscriber.id}) has removed the role {event_role.name} ({event_role.id})")
@@ -263,7 +266,11 @@ class ScheduledEventCog(commands.Cog):
         # Create and send the RSVP list to the event creator
         event_creator = await self.bot.fetch_user(event.creator_id)
         rsvp_embed = await get_empty_rsvp_embed(event.creator_id, event.name)
-        rsvp_list_message = await event_creator.send(embed=rsvp_embed)
+        try:
+            rsvp_list_message = await event_creator.send(embed=rsvp_embed)
+        except:
+            await inter.followup.send("I was unable to DM you.", ephemeral=True)
+            return
         self.rsvp_list_messages[event.id] = rsvp_list_message.id
 
         # Create and send the RSVP messages
@@ -272,9 +279,13 @@ class ScheduledEventCog(commands.Cog):
         for subscriber in event_subscribers:
             if subscriber.id == event.creator_id:
                 continue
-            rsvp_msg = await self.send_rsvp_message(event, subscriber, rsvp_list_message)
-            self.rsvp_messages[event.id].append(rsvp_msg.id)
-        await inter.followup.send("RSVP messages have been sent!", ephemeral=True)
+            try:
+                rsvp_msg = await self.send_rsvp_message(event, subscriber, rsvp_list_message)
+                self.rsvp_messages[event.id].append(rsvp_msg.id)
+            except:
+                await event_creator.send(f"<@{subscriber.id}> was not able to be DMed.")
+
+        await inter.followup.send("RSVP messages have been sent!")
 
     async def send_late_rsvp(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
         if self.rsvp_messages.get(event.id) is None:
@@ -317,6 +328,8 @@ class ScheduledEventCog(commands.Cog):
         await event_role.delete()
 
     async def delete_event(self, guild_id: int, event_id: int):
+        if not self.event_records.event_to_thread.get(event_id):
+            return
         await self.delete_all_rsvp_messages(event_id)
         await self.delete_event_role(guild_id, event_id)
         await self.event_records.remove_event(event_id)
