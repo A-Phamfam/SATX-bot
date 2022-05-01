@@ -215,10 +215,10 @@ class ScheduledEventCog(commands.Cog):
         event_thread = self.bot.get_channel(self.event_records.event_to_thread.get(event.id))
         if not event_thread:
             return
-        await event_thread.send(f"<@{subscriber.id}> is interested in **{event.name}**!")
         event_role = await self.fetch_event_role(event.guild_id, event.id)
         await subscriber.add_roles(event_role)
         logger.info(f"{subscriber.name} ({subscriber.id}) has added the role {event_role.name} ({event_role.id})")
+        await event_thread.send(f"<@{subscriber.id}> is interested in **{event.name}**!")
 
     async def unsubscribe_event_role(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
         if not self.event_records.event_to_thread.get(event.id):
@@ -353,6 +353,12 @@ class ScheduledEventCog(commands.Cog):
             self.metroplex_roles = config["metroplex_roles"]
         print(f"The IRL events channel ID was read as {config['irl_events_channel_id']} from event_config.yaml")
         print(f"The metroplex roles from event_config.yaml were {config['metroplex_roles']}")
+
+    @commands.slash_command(name="refresh_event_roles",
+                            description="Add any late event roles.")
+    async def command_refresh_event_roles(self, inter: AppCmdInter):
+        events = await inter.guild.fetch_scheduled_events()
+        await self.add_all_late_roles(inter.guild, events)
 
     async def add_all_late_roles(self, guild: disnake.Guild, events: List[disnake.GuildScheduledEvent]):
         for event in events:
