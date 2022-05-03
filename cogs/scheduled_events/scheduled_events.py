@@ -107,11 +107,11 @@ class ScheduledEventCog(commands.Cog):
         event = await inter.guild.fetch_scheduled_event(event_id)
 
         event_thread_id = event_msg.thread.id
-        event_thread = await inter.guild.fetch_channel(event_thread_id)
-        if not event_thread:
+        if not event_thread_id:
             await inter.followup.send("There is not a valid event thread connected to this message.",
                                       ephemeral=True)
             return
+        event_thread = await inter.guild.fetch_channel(event_thread_id)
 
         metro_role_id = await find_metro_role_id(event_msg.content)
         if not metro_role_id:
