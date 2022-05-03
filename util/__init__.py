@@ -1,1 +1,1 @@
-from .logger import logger
+from .my_logger import logger
