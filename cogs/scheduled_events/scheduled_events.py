@@ -133,8 +133,12 @@ class ScheduledEventCog(commands.Cog):
         """
         event_link = await get_event_link(event.guild_id, event.id)
         event_metroplex = await get_metroplex_listed(event.name)
-        metro_role_id = self.metroplex_roles.get(event_metroplex)
-        return f"<@&{metro_role_id}>\n" + f"New event: {event.name}\n" + event_link
+        if event_metroplex == "TX":
+            metro_role_ids = [f"<@&{metroplex_role_id}>" for metroplex_role_id in self.metroplex_roles.values()]
+            return "".join(metro_role_ids) + "\n" + f"New event: {event.name}\n" + event_link
+        else:
+            metro_role_id = self.metroplex_roles.get(event_metroplex)
+            return f"<@&{metro_role_id}>\n" + f"New event: {event.name}\n" + event_link
 
     async def announce_event_and_create_thread(self, event: disnake.GuildScheduledEvent):
         """
@@ -143,8 +147,12 @@ class ScheduledEventCog(commands.Cog):
         event_link = await get_event_link(event.guild_id, event.id)
         event_metroplex = await get_metroplex_listed(event.name)
 
+        # Hacky solution to let statewide events default to DTX
+        if event_metroplex == "TX":
+            event_metroplex = "DTX"
+
         # Event does not have the correct tag so alert the bot owner
-        if not (await get_metroplex_listed(event.name)):
+        if not event_metroplex:
             await self.alert_invalid_event_name(event_link)
             logger.info(f"{event.name} ({event_link}) has no metro and the bot owner has been notified.")
             return
@@ -443,7 +451,7 @@ async def get_empty_rsvp_embed(event_creator_id, event_name):
 
 
 async def get_metroplex_listed(input_string: str):
-    metroplex_regex = r"\[((?:DTX)|(?:SATX)|(?:ATX)|(?:HTX)|(?:FW)|(?:CSTAT))\]"
+    metroplex_regex = r"\[((?:DTX)|(?:SATX)|(?:ATX)|(?:HTX)|(?:FW)|(?:CSTAT)|(?:TX))\]"
     metro_match = re.search(metroplex_regex, input_string)
     if metro_match:
         return metro_match[1]
