@@ -401,7 +401,7 @@ class ScheduledEventCog(commands.Cog):
     async def purge_old_events(self, guild):
         events = await guild.fetch_scheduled_events()
         current_event_ids = [event.id for event in events]
-        event_record_ids = self.event_records.event_to_thread.keys()
+        event_record_ids = list(self.event_records.event_to_thread.keys())
         for event_record_id in event_record_ids:
             if event_record_id not in current_event_ids:
                 await self.delete_event(guild.id, event_record_id)
