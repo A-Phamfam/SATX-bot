@@ -71,25 +71,36 @@ class ScheduledEventCog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_scheduled_event_update(self, event_before: disnake.GuildScheduledEvent,
                                               event_after: disnake.GuildScheduledEvent):
-        await self.retry_thread_creation(event_before, event_after)
-        await self.rename_event_role_and_thread(event_before, event_after)
-        if event_after.status == disnake.GuildScheduledEventStatus.completed\
-                and self.event_records.event_to_thread.get(event_after.id):
+        if (event_after.status == disnake.GuildScheduledEventStatus.completed or
+            event_after.status == disnake.GuildScheduledEventStatus.canceled)\
+                and self.event_records.event_to_thread.get(event_before.id):
             await self.delete_event(event_after.guild_id, event_after.id)
+            return
+        if (not self.event_records.event_to_thread) or (event_after.id not in self.event_records.event_to_thread):
+            await self.announce_event_and_create_thread(event_after)
+        if event_before.name != event_after.name:
+            await self.rename_event_role_and_thread(event_before, event_after)
 
     @commands.Cog.listener()
     async def on_guild_scheduled_event_subscribe(self, event: disnake.GuildScheduledEvent, subscriber: disnake.Member):
-        await self.add_role_and_ping_in_thread(event, subscriber)
-        await self.send_late_rsvp(event, subscriber)
+        event_thread = self.bot.get_channel(self.event_records.event_to_thread.get(event.id))
+        if event_thread:
+            await self.add_role_and_ping_in_thread(event, subscriber)
+            if self.rsvp_messages.get(event.id) is not None:
+                await self.send_late_rsvp(event, subscriber)
 
     @commands.Cog.listener()
     async def on_guild_scheduled_event_unsubscribe(self, event: disnake.GuildScheduledEvent,
                                                    subscriber: disnake.Member):
-        await self.unsubscribe_event_role(event, subscriber)
+        event_thread = self.bot.get_channel(self.event_records.event_to_thread.get(event.id))
+        if event_thread:
+            await self.unsubscribe_event_role(event, subscriber)
 
     @commands.Cog.listener()
     async def on_guild_scheduled_event_delete(self, event: disnake.GuildScheduledEvent):
-        await self.delete_event(event.guild_id, event.id)
+        event_thread = self.bot.get_channel(self.event_records.event_to_thread.get(event.id))
+        if event_thread:
+            await self.delete_event(event.guild_id, event.id)
 
     """ Announcement and Thread Creation """
 
@@ -189,18 +200,14 @@ class ScheduledEventCog(commands.Cog):
                              f"Please edit and fix the event for the thread to be created. \n"
                              f"{event_link}")
 
-    async def retry_thread_creation(self, event_before, event_after: disnake.GuildScheduledEvent):
-        if (not self.event_records.event_to_thread) or (event_after.id not in self.event_records.event_to_thread):
-            await self.announce_event_and_create_thread(event_after)
-
     """ Event Role """
 
     async def rename_event_role_and_thread(self, event_before: disnake.GuildScheduledEvent,
                                            event_after: disnake.GuildScheduledEvent):
         if event_before.name == event_after.name:
-            return
+            raise RuntimeError("Event name is the same so the event cannot be renamed.")
         if event_after.id not in self.event_records.event_to_thread.keys():
-            return
+            raise ReferenceError("Event records does not have this event in it.")
 
         event_role = await self.fetch_event_role(event_after.guild_id, event_after.id)
         event_guild = await self.bot.fetch_guild(event_after.guild_id)
