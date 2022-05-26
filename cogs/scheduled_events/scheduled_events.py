@@ -195,7 +195,7 @@ class ScheduledEventCog(commands.Cog):
         """
         Notify bot owner to fix the event so that the proper role can be pinged.
         """
-        bot_owner = self.bot.get_user(self.bot.keys.TEST_SERVER_MOD_ID)
+        bot_owner = self.bot.fetch_user(self.bot.keys.TEST_SERVER_MOD_ID)
         await bot_owner.send(f"The following event does not list the metroplex tag. "
                              f"Please edit and fix the event for the thread to be created. \n"
                              f"{event_link}")
