@@ -1,3 +1,4 @@
+import sys
 from typing import Any
 import disnake
 from disnake import ApplicationCommandInteraction
@@ -71,7 +72,7 @@ class SATXBot(Bot):
         await self.notify_bot_owner(exception)
 
     async def on_error(self, event_method: str, *args: Any, **kwargs: Any) -> None:
-        await self.notify_bot_owner()
+        await self.notify_bot_owner(sys.exc_info()[1])
 
 
 if __name__ == '__main__':
